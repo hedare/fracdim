@@ -11,7 +11,7 @@ class Cluster {
         string clusterPath;
         int dimension;
         int particleCount = 0;
-        vector<vector<double>> particles;   //a list of all particles with their coordinates
+        vector<vector<double>> particles;
         Cluster() {};
         ~Cluster() {};
         bool getPath(string input);
