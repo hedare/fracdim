@@ -12,11 +12,15 @@ class Cluster {
         int dimension;
         int particleCount = 0;
         vector<vector<double>> particles;
+        vector<double> radii;
+        vector<double> sortedRadii;
         Cluster() {};
-        ~Cluster() {};
         bool getPath(string input);
         bool load(string input);
+        void getRadii();
         void tragheitsradius(int stepSize);
+        void bubbleSortRadii();
+        void kugvol(int stepNumber);
 };
 bool Cluster::getPath(string input){
     if (input == "old 02 1") {
@@ -140,17 +144,70 @@ bool Cluster::load(string input) {
     particleCount--;
     return true;
 }
-void Cluster::tragheitsradius(int stepSize) {
-    ofstream traraWriter("../octave/" + clusterName + "trara" + to_string(stepSize) + ".txt");
-    double RGsquared = 0;
-    for (int i = 1; i <= particleCount; i++) {
+void Cluster::getRadii() {
+    double rSquared = 0;
+    while (radii.size() < particles) {
+        radii.push_back();
+    }
+    for (int i = 1; i <= particles; i++) {
         for (int j = 0; j < dimension; j++) {
-            RGsquared+= particles[i - 1][j] * particles[i - 1][j];
+            rSquared+= particles[i - 1][j] * particles[i - 1][j];
         }
+        radii[i - 1].push_back(rSquared));
+        rSquared = 0;
+    }
+    return;
+}
+void Cluster::tragheitsradius(int stepSize) {
+    string path = "../octave/" + clusterName + "trara" + to_string(stepSize) + ".txt"
+    ofstream traraWriter(path);
+    double RGsquared = 0;
+    if (radii.empty()) {
+        getRadii();
+    }
+    for (int i = 1; i <= particleCount; i++) {
+        RGsquared+= radii[i];
         if (i % stepSize == 0) {
             traraWriter << log(i) << "," << log(RGsquared / i) << endl;
         }
     }
+    cout << "data saved in " << path << endl;
+    return;
+}
+void Cluster::bubbleSortRadii() {
+    sortedRadii = radii;
+    bool sorted = false;
+    double tempStorage1;
+    double tempStorage2;
+    while (!sorted) {
+        sorted = true;
+        for (int i = 1; i < particleCount; i++) {
+            if (sortedRadii[i - 1] > sortedRadii[i]) {
+                tempStorage1 = sortedRadii[i - 1];
+                tempStorage2 = sortedRadii[i];
+                sortedRadii[i - 1] = tempStorage2;
+                sortedRadii[i] = tempStorage1;
+                sorted = false;
+            }
+        }
+    }
+    return;
+}
+void Cluster::kugvol(int stepNumber) {
+    string path = "../octave/" + clusterName + "kugvol" + to_string(stepNumber) + ".txt"
+    ofstream kugvolWriter(path);
+    bubbleSortRadii();
+    counter = 0;
+    double maxRadius = sortedRadii[particleCount - 1];
+    double stepSize = maxRadius / stepNumber;
+    for (int i = 1; i < stepNumber; i++) {
+        while (sortedRadii[counter] < i * stepSize) {
+            counter++;
+        }
+        kugvolWriter << log(counter) << "," << log(i * stepSize) << endl;
+    }
+    kugvolWriter << log(particleCount) << "," << log(maxRadius) << endl;
+    cout << "data saved in " << path << endl;
     return;
 }
 int main() {
@@ -173,7 +230,7 @@ int main() {
             }
         }
         while (clusterLoaded) {
-            cout << "available commands: 'trara' to run the tragheitsradius analysis, 'back' to load another cluster, or 'exit' to quit the program" << endl;
+            cout << "available commands: \n 'trara' to run the tragheitsradius analysis \n 'kugvol' for the kugelvolumen method \n 'back' to load another cluster \n 'exit' to quit the program" << endl;
             getline(cin, input);
             if (input == "exit") {
                 return 0;
@@ -196,10 +253,27 @@ int main() {
                        cluster.tragheitsradius(num);
                     }
                 }
-                catch(...){
+                catch(...) {
                     cout << "invalid input" << endl;
                 }
-                cout << "success!" << endl;
+            } else if (input == "kugvol") {
+                cout << "please enter the number of steps" << endl;
+                getline(cin, input);
+                try {
+                    num = stoi(input);
+                    if (num > 1000) {
+                        cout << "are you sure? ('yes' to confirm, anything else to abort" << endl;
+                        getline(cin, input);
+                        if (input == "yes") {
+                            cluster.kugvol(num);
+                        }
+                    } else {
+                        cluster.kugvol(num);
+                    }
+                }
+                catch(...) {
+                    cout << "invalid input" << endl;
+                }
             }
         }
     }
