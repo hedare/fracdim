@@ -15,21 +15,29 @@ public:
     bool clusterLoaded = false;
     bool radiiBool = false;
     bool radiiSorted = false;
+    bool range = false;
+    double maxRadius = 0;
     int dimension;
     int particleCount = 0;
     vector<vector<double>> particles;
     vector<double> radii;
     vector<double> sortedRadii;
+    vector<double> min;
+    vector<double> max;
+    vector<unsigned long long int> boxes;
     Cluster() {};
     bool getClusterPath();
     bool load();
     void checkCommands();
     void getRadii();
     void sortRadii();
+    void getMaxRadius();
+    void getRange();
+    int coordToIndex(int coord);
     void trara(int stepSize);
     void kugvol(int stepNumber);
     void kugschal(int stepNumber);
-    void boxcount();
+    void boxcount(int stepNumber);
     void renyi();
     void correlation();
 };
@@ -193,6 +201,7 @@ void Cluster::checkCommands() {
             clusterLoaded = false;
             radiiBool = false;
             radiiSorted = false;
+            range = false;
             particleCount = 0;
         }
         else if (input == "help") {
@@ -201,7 +210,7 @@ void Cluster::checkCommands() {
                 "'trara [stepSize]' to run the tragheitsradius method" << endl <<
                 "'kugvol [stepNumber]' for the kugelvolumen method" << endl <<
                 "'kugschal [stepNumber]' for the kugelschalen method" << endl <<
-                "'boxcount' for the boxcounting method (not yet implemented)" << endl <<
+                "'boxcount [stepNumber]' for the boxcounting method" << endl <<
                 "'renyi' to derive the renyi dimension (not yet implemented)" << endl <<
                 "'corr' to get the correlation dimension (not yet implemented)" << endl <<
                 "[stepSize] and [stepNumber] are integers" << endl;
@@ -215,8 +224,8 @@ void Cluster::checkCommands() {
         else if (input.substr(0, 8) == "kugschal") {
             kugschal(stoi(input.substr(9, input.size() - 9)));
         }
-        else if (input == "boxcount") {
-            boxcount();
+        else if (input.substr(0, 8) == "boxcount") {
+            boxcount(stoi(input.substr(9, input.size() - 9)));
         }
         else {
             cout << "invalid command" << endl;
@@ -253,6 +262,48 @@ void Cluster::sortRadii() {
     }
     return;
 }
+void Cluster::getMaxRadius() {
+    if (maxRadius == 0) {
+        if (!radiiSorted) {
+            double rmax = 0;
+            getRadii();
+            for (int i = 0; i < particleCount; i++) {
+                if (radii[i] > rmax) {
+                    rmax = radii[i];
+                }
+            }
+            maxRadius = sqrt(rmax);
+        }
+        else {
+            maxRadius = sqrt(sortedRadii[particleCount - 1]);
+        }
+    }
+    return;
+}
+void Cluster::getRange() {
+    if (!range) {
+        min.resize(dimension);
+        max.resize(dimension);
+        for (int i = 0; i < particleCount; i++) {
+            for (int j = 0; j < dimension; j++) {
+                if (particles[i][j] < min[j]) {
+                    min[j] = particles[i][j];
+                }
+                else if (particles[i][j] > max[j]) {
+                    max[j] = particles[i][j];
+                }
+            }
+        }
+        range = true;
+    }
+    return;
+}
+int Cluster::coordToIndex(int coord) {
+    if (coord > 0) {
+        return 2 * coord - 1;
+    }
+    return (-2)*coord;
+}
 void Cluster::trara(int stepSize) {
     string filePath = "octave/" + clusterName + "trara" + to_string(stepSize) + ".txt";
     ofstream traraWriter(folderPath + filePath);
@@ -271,8 +322,8 @@ void Cluster::kugvol(int stepNumber) {
     string filePath = "octave/" + clusterName + "kugvol" + to_string(stepNumber) + ".txt";
     ofstream kugvolWriter(folderPath + filePath);
     sortRadii();
+    getMaxRadius();
     int counter = 0;
-    double maxRadius = sortedRadii[particleCount - 1];
     double stepSize = maxRadius / stepNumber;
     for (int i = 1; i < stepNumber; i++) {
         while (sortedRadii[counter] < i * stepSize) {
@@ -288,8 +339,8 @@ void Cluster::kugschal(int stepNumber) {
     string filePath = "octave/" + clusterName + "kugschal" + to_string(stepNumber) + ".txt";
     ofstream kugschalWriter(folderPath + filePath);
     sortRadii();
+    getMaxRadius();
     int counter;
-    double maxRadius = sortedRadii[particleCount - 1];
     double stepSize = maxRadius / stepNumber;
     for (int i = 1; i < stepNumber; i++) {
         counter = 0;
@@ -302,8 +353,53 @@ void Cluster::kugschal(int stepNumber) {
     cout << "data saved in " << filePath << endl;
     return;
 }
-void Cluster::boxcount() {
-
+void Cluster::boxcount(int stepNumber) {
+    string filePath = "octave/" + clusterName + "boxcount" + to_string(stepNumber) + ".txt";
+    ofstream boxcountWriter(folderPath + filePath);
+    getMaxRadius();
+    getRange();
+    double stepSize = maxRadius / stepNumber;
+    double boxlength;
+    double invertedBoxlength;
+    boxes.resize(particleCount);
+    unsigned long long int box;
+    int counter = 0;
+    vector<double> range(dimension);
+    for (int j = 0; j < dimension; j++) {
+        range[j] = max[j] - min[j];
+    }
+    vector<int> boxRange(dimension + 1);
+    boxRange[dimension] = 1;
+    unsigned long long int maxBox;
+    int k = 1;
+    while (k <= stepNumber && counter != 1) {
+        boxlength = stepSize * k;
+        invertedBoxlength = 1 / boxlength;
+        maxBox = 1;
+        for (int j = 0; j < dimension; j++) {
+            boxRange[j] = (int)(range[j] * invertedBoxlength + 1);
+            maxBox = maxBox * boxRange[j];
+        }
+        for (int i = 0; i < particleCount; i++) {
+            box = 0;
+            for (int j = 0; j < dimension; j++) {
+                box += coordToIndex((int)(particles[i][j] * invertedBoxlength + 0.5));
+                box = box * boxRange[j + 1];
+                boxes[i] = box;
+            }
+        }
+        sort(boxes.begin(), boxes.end());
+        counter = 1;
+        for (int i = 0; i < particleCount - 1; i++) {
+            if (boxes[i] != boxes[i + 1]) {
+                counter++;
+            }
+        }
+        cout << "k " << k << " maxBox " << maxBox << " boxes " << counter << endl;
+        boxcountWriter << log(counter) << "," << log(boxlength) << endl;
+        k++;
+    }
+    cout << "data saved in " << filePath << endl;
     return;
 }
 void Cluster::renyi() {
