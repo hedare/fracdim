@@ -4,40 +4,39 @@
 #include <math.h>
 #include <stdio.h>
 #include <vector>
-#include <algorithm>
+#include <algorithm> //sort
 using namespace std;
 class Cluster {
 public:
     string input;
     string clusterName;
     string clusterPath;
-    string folderPath = "../";
-    bool clusterLoaded = false;
-    bool radiiBool = false;
-    bool radiiSorted = false;
-    bool range = false;
+    string folderPath = "../"; //Pfad von dem Ausführungsort des Programms zum Ordner 'dla'
+    bool clusterLoaded = false; //gibt an, ob ein Cluster, bzw. seine Teilchenkoordinaten (particles), geladen wurde
     double maxRadius = 0;
-    int dimension;
-    int particleCount = 0;
-    vector<vector<double>> particles;
-    vector<double> radii;
-    vector<double> sortedRadii;
-    vector<double> min;
-    vector<double> max;
+    int dimension; //Raumdimension d
+    int particleCount = 0; //Anzahl N der Teilchen
+    vector<vector<double>> particles; // Nxd-Matrix aller Teilchenkoordinaten
+    vector<double> centerOfMass; //d-Vektor, Schwerpunktkoordinaten
+    vector<double> radii; //N-Vektor, Schwerpunktsabstände aller Teilchen
+    vector<double> sortedRadii; //N-Vektor, sortierte radii
+    vector<vector<double>> range = { {},{},{} }; //3xd-Vektor, kleinste und größte Koordinate in jeder Dimension und ihre Differenz
+    vector<double> min; //d-Vektor, kleinste Koordinate in jeder Dimension
+    vector<double> max; //d-Vektor, größte Koordinate in jeder Dimension
     vector<unsigned long long int> boxes;
     Cluster() {};
-    bool getClusterPath();
-    bool load();
-    void checkCommands();
-    void getRadii();
-    void sortRadii();
-    void getMaxRadius();
-    void getRange();
-    int coordToIndex(int coord);
-    void trara(int stepSize);
-    void kugvol(int stepNumber);
-    void kugschal(int stepNumber);
-    void boxcount(int stepNumber);
+    bool getClusterPath(); //setzt den Namen und den Pfad zu dem  jeweiligen Cluster (hart gecodet)
+    bool load(); //lädt die Koordinaten aller Teilchen des eingegebenen Clusters
+    void checkCommands(); //überprüft den Input auf die eingebauten Befehle
+    void getCenterOfMass(); //berechnet den Schwerpunkt des Clusters
+    void getRadii(); //berechnet die quadratischen Abstände aller Teilchen zum Schwerpunkt des Clusters
+    void sortRadii(); //sortiert die in in getRadii berechneten Abstände aufsteigend
+    void getMaxRadius(); //berechnet den Abstand des am weitesten vom Schwerpunkt des Clusters entfernten Teilchens
+    void getRange(); //bestimmt die kleinsten und größten Teilchenkoordinaten in jeder Dimension, sowie ihre Differenz
+    void trara(int stepSize); //berechnet den Trägheitsradius in Abhängigkeit von der Teilchenzahl
+    void kugvol(int stepNumber); //bestimmt die Anzahl der Teilchen innerhalb einer Hyperkugel um den Schwerpunkt in Abhängigkeit von deren Radius
+    void kugschal(int stepNumber); //bestimmt die Anzahl der Teilchen innerhalb einer Hyperkugelschale fester Dicke in Abhängigkeit von deren Radius
+    void boxcount(int stepNumber); //bestimmt die Anzahl an Boxen (Hyperwürfeln), mit denen der Cluster überdeckt werden kann, in Abhängigkeit von deren Kantenlänge
     void renyi();
     void correlation();
 };
@@ -136,16 +135,16 @@ bool Cluster::getClusterPath() {
     return true;
 }
 bool Cluster::load() {
-    if (input.size() != 8) {
+    if (input.size() != 8) { //korrekter input besteht immer aus 8 zeichen
         cout << "invalid input, please try again" << endl;
         return false;
     }
-    if (!getClusterPath()) {
+    if (!getClusterPath()) { //wendet getClusterPath, welches false ausgibt, wenn der input nicht korrekt ist
         cout << "invalid input, please try again" << endl;
         return false;
     }
     ifstream reader(folderPath + clusterPath);
-    if (!reader) {
+    if (!reader) { //gibt false aus, wenn die datei nicht gefunden wurde
         cout << "error opening cluster file" << endl;
         return false;
     }
@@ -157,7 +156,7 @@ bool Cluster::load() {
         reader.get(letter);
         if (letter == ' ') {
             wordCount++;
-            switch (wordCount) {
+            switch (wordCount) { //liest die raumdimension und die teilchenzahl aus der ersten zeile der datei
             case 1:
                 dimension = stoi(word);
                 break;
@@ -178,12 +177,12 @@ bool Cluster::load() {
     while (!reader.eof()) {
         reader.get(letter);
         if (letter == ' ') {
-            particles[particleCount].push_back(stod(word));
+            particles[particleCount].push_back(stod(word)); //schreibt die korrdinaten in particles
             word = "";
         }
         else if (letter == '\n') {
             particleCount++;
-            if (particleCount % 10000 == 0) {
+            if (particleCount % 100000 == 0) {
                 cout << particleCount << " particles loaded" << endl;
             }
         }
@@ -197,12 +196,14 @@ bool Cluster::load() {
 }
 void Cluster::checkCommands() {
     try {
-        if (input == "back") {
-            clusterLoaded = false;
-            radiiBool = false;
-            radiiSorted = false;
-            range = false;
+        if (input == "back") { //löscht wichtige variablen, damit ein neuer cluster geladen werden kann
+            particles.clear();
+            centerOfMass.clear();
+            radii.clear();
+            sortedRadii.clear();
+            min.clear();
             particleCount = 0;
+            clusterLoaded = false;
         }
         else if (input == "help") {
             cout << "'back' to load another cluster" << endl <<
@@ -232,42 +233,51 @@ void Cluster::checkCommands() {
         }
     }
     catch (const exception& e) {
-        cout << e.what() << endl;
+        cout << e.what() << endl; //outputtet den error text
+    }
+    return;
+}
+void Cluster::getCenterOfMass() {
+    if (centerOfMass.empty()) {
+        centerOfMass.resize(dimension);
+        for (int j = 0; j < dimension; j++) {
+           for (int i = 0; i < particleCount; i++) {
+                centerOfMass[j] += particles[i][j]; //mittelt die koordinatenwerte für alle teilchen in jeder dimension
+           }
+           centerOfMass[j] = centerOfMass[j] / particleCount;
+        }
     }
     return;
 }
 void Cluster::getRadii() {
-    if (!radiiBool) {
-        vector<double> coordSum(dimension);
-        double rSquared = 0;
+    getCenterOfMass();
+    if (radii.empty()) {
+        double rSquared;
         radii.resize(particleCount);
-        for (int i = 1; i <= particleCount; i++) {
-            for (int j = 0; j < dimension; j++) {
-                coordSum[j] += particles[i - 1][j];
-                rSquared += (particles[i - 1][j] - coordSum[j] / i) * (particles[i - 1][j] - coordSum[j] / i);
-            }
-            radii[i - 1] = rSquared;
+        for (int i = 0; i < particleCount; i++) {
             rSquared = 0;
+            for (int j = 0; j < dimension; j++) {
+                rSquared += (particles[i][j] - centerOfMass[j]) * (particles[i][j] - centerOfMass[j]); //berechnet den quadratischen abstand zum schwerpunkt für jedes teilchen
+            }
+            radii[i] = rSquared;
         }
-        radiiBool = true;
     }
     return;
 }
 void Cluster::sortRadii() {
     getRadii();
-    if (!radiiSorted) {
+    if (sortedRadii.empty()) {
         sortedRadii = radii;
-        sort(sortedRadii.begin(), sortedRadii.end());
-        radiiSorted = true;
+        sort(sortedRadii.begin(), sortedRadii.end()); //eingebaute funktion aus der algorithm bibliothek
     }
     return;
 }
 void Cluster::getMaxRadius() {
     if (maxRadius == 0) {
-        if (!radiiSorted) {
+        if (sortedRadii.empty()) {
             double rmax = 0;
             getRadii();
-            for (int i = 0; i < particleCount; i++) {
+            for (int i = 0; i < particleCount; i++) { //durchsucht alle abstände nach dem größten unter ihnen
                 if (radii[i] > rmax) {
                     rmax = radii[i];
                 }
@@ -275,51 +285,45 @@ void Cluster::getMaxRadius() {
             maxRadius = sqrt(rmax);
         }
         else {
-            maxRadius = sqrt(sortedRadii[particleCount - 1]);
+            maxRadius = sqrt(sortedRadii[particleCount - 1]); //wenn die abstände schon sortiert sind, ist die letzte komponente von sortedRadii der größte abstand
         }
     }
     return;
 }
 void Cluster::getRange() {
-    if (!range) {
-        min.resize(dimension);
-        max.resize(dimension);
-        for (int i = 0; i < particleCount; i++) {
-            for (int j = 0; j < dimension; j++) {
-                if (particles[i][j] < min[j]) {
-                    min[j] = particles[i][j];
+    if (range[0].empty()) {
+        range[0].resize(dimension);
+        range[1].resize(dimension);
+        for (int j = 0; j < dimension; j++) {
+            for (int i = 0; i < particleCount; i++) {
+                if (particles[i][j] < range[0][j]) { //sucht nach der kleinsten koordinate unter allen teilchen in jeder dimension
+                    range[0][j] = particles[i][j];
                 }
-                else if (particles[i][j] > max[j]) {
-                    max[j] = particles[i][j];
+                else if (particles[i][j] > range [1][j]) { //sucht nach der größten koordinate unter allen teilchen in jeder dimension
+                    range[1][j] = particles[i][j];
                 }
             }
+            range[2][j] = range[1][j] - range[0][j]; //berechnet die ausdehnung des clusters in jeder dimension
         }
-        range = true;
     }
     return;
 }
-int Cluster::coordToIndex(int coord) {
-    if (coord > 0) {
-        return 2 * coord - 1;
-    }
-    return (-2)*coord;
-}
 void Cluster::trara(int stepSize) {
-    string filePath = "octave/" + clusterName + "trara" + to_string(stepSize) + ".txt";
+    string filePath = "octave/" + clusterName + "trara" + to_string(stepSize) + ".txt"; //dateiname enthält die methode und die schrittweite
     ofstream traraWriter(folderPath + filePath);
     double RGsquared = 0;
     getRadii();
     for (int i = 1; i <= particleCount; i++) {
         RGsquared += radii[i - 1];
         if (i % stepSize == 0) {
-            traraWriter << log(i) << "," << log(RGsquared / i) << endl;
+            traraWriter << log(i) << "," << log(RGsquared / i) << endl; //schreibt die daten log(teilchenzahl),log(mittlerer quadratischer abstand dieser teilchen) in die datei
         }
     }
     cout << "data saved in " << filePath << endl;
     return;
 }
 void Cluster::kugvol(int stepNumber) {
-    string filePath = "octave/" + clusterName + "kugvol" + to_string(stepNumber) + ".txt";
+    string filePath = "octave/" + clusterName + "kugvol" + to_string(stepNumber) + ".txt"; //datei enthält die methode und die schrittzahl
     ofstream kugvolWriter(folderPath + filePath);
     sortRadii();
     getMaxRadius();
@@ -329,14 +333,14 @@ void Cluster::kugvol(int stepNumber) {
         while (sortedRadii[counter] < i * stepSize) {
             counter++;
         }
-        kugvolWriter << log(counter) << "," << log(i * stepSize) << endl;
+        kugvolWriter << log(counter) << "," << log(i * stepSize) << endl; //schreibt die daten log(anzahl der teilchen in einer kugel um den schwerpunkt),log(radius der kugel) in die datei
     }
     kugvolWriter << log(particleCount) << "," << log(maxRadius) << endl;
     cout << "data saved in " << filePath << endl;
     return;
 }
 void Cluster::kugschal(int stepNumber) {
-    string filePath = "octave/" + clusterName + "kugschal" + to_string(stepNumber) + ".txt";
+    string filePath = "octave/" + clusterName + "kugschal" + to_string(stepNumber) + ".txt"; //datei enthält die methode und die schrittzahl
     ofstream kugschalWriter(folderPath + filePath);
     sortRadii();
     getMaxRadius();
@@ -347,14 +351,14 @@ void Cluster::kugschal(int stepNumber) {
         while (sortedRadii[counter] < i * stepSize) {
             counter++;
         }
-        kugschalWriter << log(counter / (pow(i, dimension) - pow(i - 1, dimension))) << "," << log(i * stepSize) << endl;
+        kugschalWriter << log(counter / (pow(i, dimension) - pow(i - 1, dimension))) << "," << log(i * stepSize) << endl; //schreibt die daten log(anzahl der teilchen in einer kugelschale um den schwerpunkt),log(radius der äußeren kugel) in die datei
     }
     kugschalWriter << log(particleCount / (pow(stepNumber, dimension) - pow(stepNumber - 1, dimension))) << "," << log(maxRadius) << endl;
     cout << "data saved in " << filePath << endl;
     return;
 }
 void Cluster::boxcount(int stepNumber) {
-    string filePath = "octave/" + clusterName + "boxcount" + to_string(stepNumber) + ".txt";
+    string filePath = "octave/" + clusterName + "boxcount" + to_string(stepNumber) + ".txt"; //dateiname enthält die methode und die schrittzahl
     ofstream boxcountWriter(folderPath + filePath);
     getMaxRadius();
     getRange();
@@ -362,12 +366,8 @@ void Cluster::boxcount(int stepNumber) {
     double boxlength;
     double invertedBoxlength;
     boxes.resize(particleCount);
-    unsigned long long int box;
+    unsigned long long int box; //N-Vektor, enthält für jedes teilchen die nummer dessen zugeordneter box
     int counter = 0;
-    vector<double> range(dimension);
-    for (int j = 0; j < dimension; j++) {
-        range[j] = max[j] - min[j];
-    }
     vector<int> boxRange(dimension + 1);
     boxRange[dimension] = 1;
     unsigned long long int maxBox;
@@ -377,40 +377,40 @@ void Cluster::boxcount(int stepNumber) {
         invertedBoxlength = 1 / boxlength;
         maxBox = 1;
         for (int j = 0; j < dimension; j++) {
-            boxRange[j] = (int)(range[j] * invertedBoxlength + 1);
+            boxRange[j] = (int)(range[2][j] * invertedBoxlength + 1); //rundet die koordinaten des teilchens auf den nächsten gitterpunkt
             maxBox = maxBox * boxRange[j];
         }
         for (int i = 0; i < particleCount; i++) {
             box = 0;
             for (int j = 0; j < dimension; j++) {
-                box += coordToIndex((int)(particles[i][j] * invertedBoxlength + 0.5));
+                box += (int)((particles[i][j] - range[0][j]) * invertedBoxlength + 0.5);
                 box = box * boxRange[j + 1];
-                boxes[i] = box;
             }
+            boxes[i] = box; //jede den teilchen zugeordnete box bekommt einen int zugewiesen, der eindeutig die position der box beschreibt
         }
-        sort(boxes.begin(), boxes.end());
+        sort(boxes.begin(), boxes.end()); //sortiert die zugeordneten boxen
         counter = 1;
-        for (int i = 0; i < particleCount - 1; i++) {
+        for (int i = 0; i < particleCount - 1; i++) { //zählt die anzahl verschiedener boxen
             if (boxes[i] != boxes[i + 1]) {
                 counter++;
             }
         }
-        cout << "k " << k << " maxBox " << maxBox << " boxes " << counter << endl;
+        cout << "k " << k << " maxBox " << maxBox << " boxes " << counter << endl; //outputtet die aktuelle schrittzahl, den höchsten möglichen boxindex, und die anzahl verschiedener boxen
         boxcountWriter << log(counter) << "," << log(boxlength) << endl;
         k++;
     }
     cout << "data saved in " << filePath << endl;
     return;
 }
-void Cluster::renyi() {
+void Cluster::renyi() { //nicht implementiert
 
     return;
 }
-void Cluster::correlation() {
+void Cluster::correlation() { //nicht implementiert
 
     return;
 }
-int main() {
+int main() { //Benutzerschnittstelle, von der aus Cluster geladen und Befehle zur Dimensionsbestimmung eingegeben werden können
     Cluster cluster = Cluster();
     while (1) {
         if (!cluster.clusterLoaded) {
