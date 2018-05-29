@@ -330,7 +330,7 @@ void Cluster::kugvol(int stepNumber) {
     int counter = 0;
     double stepSize = maxRadius / stepNumber;
     for (int i = 1; i < stepNumber; i++) {
-        while (sortedRadii[counter] < i * stepSize) {
+        while (sortedRadii[counter] < i * i * stepSize * stepSize) {
             counter++;
         }
         kugvolWriter << log(counter) << "," << log(i * stepSize) << endl; //schreibt die daten log(anzahl der teilchen in einer kugel um den schwerpunkt),log(radius der kugel) in die datei
@@ -348,7 +348,7 @@ void Cluster::kugschal(int stepNumber) {
     double stepSize = maxRadius / stepNumber;
     for (int i = 1; i < stepNumber; i++) {
         counter = 0;
-        while (sortedRadii[counter] < i * stepSize) {
+        while (sortedRadii[counter] < i * i * stepSize * stepSize) {
             counter++;
         }
         kugschalWriter << log(counter / (pow(i, dimension) - pow(i - 1, dimension))) << "," << log(i * stepSize) << endl; //schreibt die daten log(anzahl der teilchen in einer kugelschale um den schwerpunkt),log(radius der äußeren kugel) in die datei
