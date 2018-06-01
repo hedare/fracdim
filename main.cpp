@@ -294,6 +294,7 @@ void Cluster::getRange() {
     if (range[0].empty()) {
         range[0].resize(dimension);
         range[1].resize(dimension);
+        range[2].resize(dimension);
         for (int j = 0; j < dimension; j++) {
             for (int i = 0; i < particleCount; i++) {
                 if (particles[i][j] < range[0][j]) { //sucht nach der kleinsten koordinate unter allen teilchen in jeder dimension
@@ -309,7 +310,7 @@ void Cluster::getRange() {
     return;
 }
 void Cluster::trara(int stepSize) {
-    string filePath = "octave/" + clusterName + "trara" + to_string(stepSize) + ".txt"; //dateiname enthält die methode und die schrittweite
+    string filePath = "octave/trara/" + clusterName + "trara" + to_string(stepSize) + ".txt"; //dateiname enthält die methode und die schrittweite
     ofstream traraWriter(folderPath + filePath);
     double RGsquared = 0;
     getRadii();
@@ -323,14 +324,14 @@ void Cluster::trara(int stepSize) {
     return;
 }
 void Cluster::kugvol(int stepNumber) {
-    string filePath = "octave/" + clusterName + "kugvol" + to_string(stepNumber) + ".txt"; //datei enthält die methode und die schrittzahl
+    string filePath = "octave/kugvol/" + clusterName + "kugvol" + to_string(stepNumber) + ".txt"; //datei enthält die methode und die schrittzahl
     ofstream kugvolWriter(folderPath + filePath);
     sortRadii();
     getMaxRadius();
     int counter = 0;
     double stepSize = maxRadius / stepNumber;
     for (int i = 1; i < stepNumber; i++) {
-        while (sortedRadii[counter] < i * stepSize) {
+        while (sortedRadii[counter] < i * i * stepSize * stepSize) {
             counter++;
         }
         kugvolWriter << log(counter) << "," << log(i * stepSize) << endl; //schreibt die daten log(anzahl der teilchen in einer kugel um den schwerpunkt),log(radius der kugel) in die datei
@@ -340,25 +341,26 @@ void Cluster::kugvol(int stepNumber) {
     return;
 }
 void Cluster::kugschal(int stepNumber) {
-    string filePath = "octave/" + clusterName + "kugschal" + to_string(stepNumber) + ".txt"; //datei enthält die methode und die schrittzahl
+    string filePath = "octave/kugschal/" + clusterName + "kugschal" + to_string(stepNumber) + ".txt"; //datei enthält die methode und die schrittzahl
     ofstream kugschalWriter(folderPath + filePath);
     sortRadii();
     getMaxRadius();
     int counter;
     double stepSize = maxRadius / stepNumber;
+    double dimLogStepSize = dimension * log(stepSize);
     for (int i = 1; i < stepNumber; i++) {
         counter = 0;
-        while (sortedRadii[counter] < i * stepSize) {
+        while (sortedRadii[counter] < i * i * stepSize * stepSize) {
             counter++;
         }
-        kugschalWriter << log(counter / (pow(i, dimension) - pow(i - 1, dimension))) << "," << log(i * stepSize) << endl; //schreibt die daten log(anzahl der teilchen in einer kugelschale um den schwerpunkt),log(radius der äußeren kugel) in die datei
+        kugschalWriter << log(counter / (pow(i, dimension) - pow(i - 1, dimension))) - dimLogStepSize << "," << log(i * stepSize) << endl; //schreibt die daten log(anzahl der teilchen in einer kugelschale um den schwerpunkt),log(radius der äußeren kugel) in die datei
     }
-    kugschalWriter << log(particleCount / (pow(stepNumber, dimension) - pow(stepNumber - 1, dimension))) << "," << log(maxRadius) << endl;
+    kugschalWriter << log(particleCount / (pow(stepNumber, dimension) - pow(stepNumber - 1, dimension))) - dimLogStepSize  << "," << log(maxRadius) << endl;
     cout << "data saved in " << filePath << endl;
     return;
 }
 void Cluster::boxcount(int stepNumber) {
-    string filePath = "octave/" + clusterName + "boxcount" + to_string(stepNumber) + ".txt"; //dateiname enthält die methode und die schrittzahl
+    string filePath = "octave/boxcount/" + clusterName + "boxcount" + to_string(stepNumber) + ".txt"; //dateiname enthält die methode und die schrittzahl
     ofstream boxcountWriter(folderPath + filePath);
     getMaxRadius();
     getRange();
