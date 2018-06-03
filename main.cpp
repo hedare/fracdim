@@ -4,7 +4,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <vector>
-#include <algorithm> //sort
+#include <algorithm> //implementiert die sort()-funktion
 using namespace std;
 class Cluster {
 public:
@@ -21,8 +21,6 @@ public:
     vector<double> radii; //N-Vektor, Schwerpunktsabstände aller Teilchen
     vector<double> sortedRadii; //N-Vektor, sortierte radii
     vector<vector<double>> range = { {},{},{} }; //3xd-Vektor, kleinste und größte Koordinate in jeder Dimension und ihre Differenz
-    vector<double> min; //d-Vektor, kleinste Koordinate in jeder Dimension
-    vector<double> max; //d-Vektor, größte Koordinate in jeder Dimension
     vector<unsigned long long int> boxes;
     Cluster() {};
     bool getClusterPath(); //setzt den Namen und den Pfad zu dem  jeweiligen Cluster (hart gecodet)
@@ -33,12 +31,14 @@ public:
     void sortRadii(); //sortiert die in in getRadii berechneten Abstände aufsteigend
     void getMaxRadius(); //berechnet den Abstand des am weitesten vom Schwerpunkt des Clusters entfernten Teilchens
     void getRange(); //bestimmt die kleinsten und größten Teilchenkoordinaten in jeder Dimension, sowie ihre Differenz
+    void getBoxes(double boxlength); //bestimmt die Anzahl an Boxen (Hyperwürfeln), mit denen der Cluster überdeckt werden kann, in Abhängigkeit von deren Kantenlänge
     void trara(int stepSize); //berechnet den Trägheitsradius in Abhängigkeit von der Teilchenzahl
     void kugvol(int stepNumber); //bestimmt die Anzahl der Teilchen innerhalb einer Hyperkugel um den Schwerpunkt in Abhängigkeit von deren Radius
     void kugschal(int stepNumber); //bestimmt die Anzahl der Teilchen innerhalb einer Hyperkugelschale fester Dicke in Abhängigkeit von deren Radius
-    void boxcount(int stepNumber); //bestimmt die Anzahl an Boxen (Hyperwürfeln), mit denen der Cluster überdeckt werden kann, in Abhängigkeit von deren Kantenlänge
-    void renyi();
+    void boxcount(int stepNumber); //bestimmt die fraktale Dimension nach der Boxcountingmethode
+    void information(int stepNumber);
     void correlation();
+    void renyi();
 };
 bool Cluster::getClusterPath() {
     if (input == "old 02 1") {
@@ -196,12 +196,11 @@ bool Cluster::load() {
 }
 void Cluster::checkCommands() {
     try {
-        if (input == "back") { //löscht wichtige variablen, damit ein neuer cluster geladen werden kann
+        if (input == "back") { //löscht bestimmte variablen, damit ein neuer cluster geladen werden kann
             particles.clear();
             centerOfMass.clear();
             radii.clear();
             sortedRadii.clear();
-            min.clear();
             particleCount = 0;
             clusterLoaded = false;
         }
@@ -212,8 +211,9 @@ void Cluster::checkCommands() {
                 "'kugvol [stepNumber]' for the kugelvolumen method" << endl <<
                 "'kugschal [stepNumber]' for the kugelschalen method" << endl <<
                 "'boxcount [stepNumber]' for the boxcounting method" << endl <<
-                "'renyi' to derive the renyi dimension (not yet implemented)" << endl <<
+                "'info [stepNumber' to derive the information dimension" << endl <<
                 "'corr' to get the correlation dimension (not yet implemented)" << endl <<
+                "`renyi' to get the renyi dimension (not yet implemented)" << endl <<
                 "[stepSize] and [stepNumber] are integers" << endl;
         }
         else if (input.substr(0, 5) == "trara") {
@@ -227,6 +227,9 @@ void Cluster::checkCommands() {
         }
         else if (input.substr(0, 8) == "boxcount") {
             boxcount(stoi(input.substr(9, input.size() - 9)));
+        }
+        else if (input.substr(0, 4) == "info") {
+            information(stoi(input.substr(5, input.size() - 5)));
         }
         else {
             cout << "invalid command" << endl;
@@ -309,6 +312,27 @@ void Cluster::getRange() {
     }
     return;
 }
+void Cluster::getBoxes(double boxlength) {
+    unsigned long long int box; //N-Vektor, enthält für jedes teilchen die nummer dessen zugeordneter boxmaxBox = 1;
+    unsigned long long int maxBox = 1; //höchstmöglicher Boxindex
+    double invertedBoxlength = 1 / boxlength;
+    vector<int> boxRange(dimension + 1);
+    boxRange[dimension] = 1;
+    for (int j = 0; j < dimension; j++) {
+        boxRange[j] = (int)(range[2][j] * invertedBoxlength + 1); //rundet die koordinaten des teilchens auf den nächsten gitterpunkt
+        maxBox = maxBox * boxRange[j];
+    }
+    cout << " maxbox " << maxBox;
+    for (int i = 0; i < particleCount; i++) {
+        box = 0;
+        for (int j = 0; j < dimension; j++) {
+            box += (int)((particles[i][j] - range[0][j]) * invertedBoxlength + 0.5);
+            box = box * boxRange[j + 1];
+        }
+        boxes[i] = box; //jede den teilchen zugeordnete box bekommt einen int zugewiesen, der eindeutig die position der box beschreibt
+    }
+    sort(boxes.begin(), boxes.end()); //sortiert die zugeordneten boxen
+}
 void Cluster::trara(int stepSize) {
     string filePath = "octave/trara/" + clusterName + "trara" + to_string(stepSize) + ".txt"; //dateiname enthält die methode und die schrittweite
     ofstream traraWriter(folderPath + filePath);
@@ -366,49 +390,69 @@ void Cluster::boxcount(int stepNumber) {
     getRange();
     double stepSize = maxRadius / stepNumber;
     double boxlength;
-    double invertedBoxlength;
     boxes.resize(particleCount);
-    unsigned long long int box; //N-Vektor, enthält für jedes teilchen die nummer dessen zugeordneter box
     int counter = 0;
-    vector<int> boxRange(dimension + 1);
-    boxRange[dimension] = 1;
-    unsigned long long int maxBox;
-    int k = 1;
-    while (k <= stepNumber && counter != 1) {
+    for (int k = 1; k <= stepNumber; k++) {
+        cout << "k " << k;
         boxlength = stepSize * k;
-        invertedBoxlength = 1 / boxlength;
-        maxBox = 1;
-        for (int j = 0; j < dimension; j++) {
-            boxRange[j] = (int)(range[2][j] * invertedBoxlength + 1); //rundet die koordinaten des teilchens auf den nächsten gitterpunkt
-            maxBox = maxBox * boxRange[j];
-        }
-        for (int i = 0; i < particleCount; i++) {
-            box = 0;
-            for (int j = 0; j < dimension; j++) {
-                box += (int)((particles[i][j] - range[0][j]) * invertedBoxlength + 0.5);
-                box = box * boxRange[j + 1];
-            }
-            boxes[i] = box; //jede den teilchen zugeordnete box bekommt einen int zugewiesen, der eindeutig die position der box beschreibt
-        }
-        sort(boxes.begin(), boxes.end()); //sortiert die zugeordneten boxen
+        getBoxes(boxlength);
         counter = 1;
-        for (int i = 0; i < particleCount - 1; i++) { //zählt die anzahl verschiedener boxen
+        for (int i = 0; i < particleCount - 1; i++) { //bestimmt die anzahl verschiedener boxen
             if (boxes[i] != boxes[i + 1]) {
                 counter++;
             }
         }
-        cout << "k " << k << " maxBox " << maxBox << " boxes " << counter << endl; //outputtet die aktuelle schrittzahl, den höchsten möglichen boxindex, und die anzahl verschiedener boxen
+        cout << " boxes " << counter << endl;
         boxcountWriter << log(counter) << "," << log(boxlength) << endl;
-        k++;
     }
     cout << "data saved in " << filePath << endl;
     return;
 }
-void Cluster::renyi() { //nicht implementiert
-
+void Cluster::information(int stepNumber) {
+    string filePath = "octave/info/" + clusterName + "info" + to_string(stepNumber) + ".txt"; //dateiname enthält die methode und die schrittzahl
+    ofstream infoWriter(folderPath + filePath);
+    getMaxRadius();
+    getRange();
+    double stepSize = 0.1 * maxRadius / stepNumber;
+    double boxlength;
+    double infoFunction;
+    boxes.resize(particleCount);
+    int counter = 0;
+    double logCounter;
+    for (int k = 1; k <= stepNumber; k++) {
+        cout << "k " << k;
+        boxlength = stepSize * k;
+        getBoxes(boxlength);
+        counter = 1;
+        for (int i = 0; i < particleCount - 1; i++) { //bestimmt die anzahl verschiedener boxen
+            if (boxes[i] != boxes[i + 1]) {
+                counter++;
+            }
+        }
+        logCounter = log(counter);
+        infoFunction = 0;
+        int counter2 = 0;
+        for (int i = 0; i < particleCount - 1; i++) {
+            if (boxes[i] != boxes[i + 1]) { //bestimmt die anzahl der teilchen in jeder box
+                infoFunction += (log(counter2)-logCounter)*counter2/counter;
+                counter2 = 1;
+            }
+            else {
+                counter2++;
+            }
+        }
+        infoFunction += (log(counter2)-logCounter)*counter2/counter;
+        cout << " boxes " << counter << endl;
+        infoWriter << -infoFunction/log(boxlength) << "," << boxlength << endl;
+    }
+    cout << "data saved in " << filePath << endl;
     return;
 }
 void Cluster::correlation() { //nicht implementiert
+
+    return;
+}
+void Cluster::renyi() { //nicht implementiert
 
     return;
 }
