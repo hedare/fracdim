@@ -32,13 +32,14 @@ public:
     void getMaxRadius(); //berechnet den Abstand des am weitesten vom Schwerpunkt des Clusters entfernten Teilchens
     void getRange(); //bestimmt die kleinsten und größten Teilchenkoordinaten in jeder Dimension, sowie ihre Differenz
     void getBoxes(double boxlength); //bestimmt die Anzahl an Boxen (Hyperwürfeln), mit denen der Cluster überdeckt werden kann, in Abhängigkeit von deren Kantenlänge
-    void trara(int stepSize); //berechnet den Trägheitsradius in Abhängigkeit von der Teilchenzahl
+    void trara1(int stepNumber); //berechnet den Trägheitsradius in Abhängigkeit von der Teilchenzahl, Teilchen nach Abstand zum Schwerpunkt sortiert
+    void trara2(int stepNumber); //berechnet den Trägheitsradius in Abhängigkeit von der Teilchenzahl, Teilchen in zeitlicher Reihenfolge
     void kugvol(int stepNumber); //bestimmt die Anzahl der Teilchen innerhalb einer Hyperkugel um den Schwerpunkt in Abhängigkeit von deren Radius
     void kugschal(int stepNumber); //bestimmt die Anzahl der Teilchen innerhalb einer Hyperkugelschale fester Dicke in Abhängigkeit von deren Radius
     void boxcount(int stepNumber); //bestimmt die fraktale Dimension nach der Boxcountingmethode
-    void information(int stepNumber);
-    void correlation();
-    void renyi();
+    void info(int stepNumber);
+    void renyi(double q);
+    void correl(int stepNumber);
 };
 bool Cluster::getClusterPath() {
     if (input == "old 02 1") {
@@ -139,7 +140,7 @@ bool Cluster::load() {
         cout << "invalid input, please try again" << endl;
         return false;
     }
-    if (!getClusterPath()) { //wendet getClusterPath, welches false ausgibt, wenn der input nicht korrekt ist
+    if (!getClusterPath()) { //wendet getClusterPath an, welches false ausgibt, wenn der input nicht korrekt ist
         cout << "invalid input, please try again" << endl;
         return false;
     }
@@ -207,17 +208,21 @@ void Cluster::checkCommands() {
         else if (input == "help") {
             cout << "'back' to load another cluster" << endl <<
                 "'exit' to quit the program" << endl <<
-                "'trara [stepSize]' to run the tragheitsradius method" << endl <<
+                "'trara1 [stepNumber]' to run the tragheitsradius method (radial)" << endl <<
+                "'trara2 [stepNumber]' to run the alternative tragheitsradius method (chronological)" << endl <<
                 "'kugvol [stepNumber]' for the kugelvolumen method" << endl <<
                 "'kugschal [stepNumber]' for the kugelschalen method" << endl <<
                 "'boxcount [stepNumber]' for the boxcounting method" << endl <<
-                "'info [stepNumber' to derive the information dimension" << endl <<
-                "'corr' to get the correlation dimension (not yet implemented)" << endl <<
-                "`renyi' to get the renyi dimension (not yet implemented)" << endl <<
-                "[stepSize] and [stepNumber] are integers" << endl;
+                "'info [stepNumber]' to derive the information dimension" << endl <<
+                "`renyi [q]' to get the renyi dimension" << endl <<
+                "'correl [stepNumber]' to get the correlation dimension (not yet implemented)" << endl <<
+                "[stepNumber] is an integer, [q] is a double" << endl;
         }
-        else if (input.substr(0, 5) == "trara") {
-            trara(stoi(input.substr(6, input.size() - 6)));
+        else if (input.substr(0, 6) == "trara1") {
+            trara1(stoi(input.substr(7, input.size() - 7)));
+        }
+        else if (input.substr(0, 6) == "trara2") {
+            trara2(stoi(input.substr(7, input.size() - 7)));
         }
         else if (input.substr(0, 6) == "kugvol") {
             kugvol(stoi(input.substr(7, input.size() - 7)));
@@ -229,7 +234,13 @@ void Cluster::checkCommands() {
             boxcount(stoi(input.substr(9, input.size() - 9)));
         }
         else if (input.substr(0, 4) == "info") {
-            information(stoi(input.substr(5, input.size() - 5)));
+            info(stoi(input.substr(5, input.size() - 5)));
+        }
+        else if (input.substr(0, 5) == "renyi") {
+            renyi(stod(input.substr(6, input.size() - 6)));
+        }
+        else if (input.substr(0, 6) == "correl") {
+            correl(stoi(input.substr(7, input.size() - 7)));
         }
         else {
             cout << "invalid command" << endl;
@@ -333,17 +344,39 @@ void Cluster::getBoxes(double boxlength) {
     }
     sort(boxes.begin(), boxes.end()); //sortiert die zugeordneten boxen
 }
-void Cluster::trara(int stepSize) {
-    string filePath = "octave/trara/" + clusterName + "trara" + to_string(stepSize) + ".txt"; //dateiname enthält die methode und die schrittweite
+void Cluster::trara1(int stepNumber) {
+    string filePath = "octave/trara/" + clusterName + "trara1_" + to_string(stepNumber) + ".txt"; //dateiname enthält die methode und die schrittweite
+    ofstream traraWriter(folderPath + filePath);
+    double RGsquared = 0;
+    sortRadii();
+    double currentStep = 1;
+    double stepSize = pow(particleCount / currentStep, 1.0 / stepNumber);
+    for (int i = 1; i <= particleCount; i++) {
+        RGsquared += sortedRadii[i - 1];
+        if (i % (int)currentStep == 0) {
+            traraWriter << log(i) << "," << log(RGsquared / i) << endl; //schreibt die daten log(teilchenzahl),log(mittlerer quadratischer abstand dieser teilchen) in die datei
+            currentStep = currentStep * stepSize + 1;
+        }
+    }
+    traraWriter << log(particleCount) << "," << log(RGsquared / particleCount) << endl;
+    cout << "data saved in " << filePath << endl;
+    return;
+}
+void Cluster::trara2(int stepNumber) {
+    string filePath = "octave/trara/" + clusterName + "trara2_" + to_string(stepNumber) + ".txt"; //dateiname enthält die methode und die schrittweite
     ofstream traraWriter(folderPath + filePath);
     double RGsquared = 0;
     getRadii();
+    double currentStep = 1;
+    double stepSize = pow(particleCount / currentStep, 1.0 / stepNumber);
     for (int i = 1; i <= particleCount; i++) {
         RGsquared += radii[i - 1];
-        if (i % stepSize == 0) {
+        if (i % (int)currentStep == 0) {
             traraWriter << log(i) << "," << log(RGsquared / i) << endl; //schreibt die daten log(teilchenzahl),log(mittlerer quadratischer abstand dieser teilchen) in die datei
+            currentStep = currentStep * stepSize + 1;
         }
     }
+    traraWriter << log(particleCount) << "," << log(RGsquared / particleCount) << endl;
     cout << "data saved in " << filePath << endl;
     return;
 }
@@ -353,12 +386,14 @@ void Cluster::kugvol(int stepNumber) {
     sortRadii();
     getMaxRadius();
     int counter = 0;
-    double stepSize = maxRadius / stepNumber;
-    for (int i = 1; i < stepNumber; i++) {
-        while (sortedRadii[counter] < i * i * stepSize * stepSize) {
+    double currentStep = 0.5;
+    double stepSize = pow(maxRadius  / currentStep, 1.0 / stepNumber);
+    while (currentStep < maxRadius) {
+        while (sortedRadii[counter] < currentStep * currentStep) {
             counter++;
         }
-        kugvolWriter << log(counter) << "," << log(i * stepSize) << endl; //schreibt die daten log(anzahl der teilchen in einer kugel um den schwerpunkt),log(radius der kugel) in die datei
+        kugvolWriter << log(counter) << "," << log(currentStep) << endl; //schreibt die daten log(anzahl der teilchen in einer kugel um den schwerpunkt),log(radius der kugel) in die datei
+        currentStep = currentStep * stepSize;
     }
     kugvolWriter << log(particleCount) << "," << log(maxRadius) << endl;
     cout << "data saved in " << filePath << endl;
@@ -379,7 +414,7 @@ void Cluster::kugschal(int stepNumber) {
         }
         kugschalWriter << log(counter / (pow(i, dimension) - pow(i - 1, dimension))) - dimLogStepSize << "," << log(i * stepSize) << endl; //schreibt die daten log(anzahl der teilchen in einer kugelschale um den schwerpunkt),log(radius der äußeren kugel) in die datei
     }
-    kugschalWriter << log(particleCount / (pow(stepNumber, dimension) - pow(stepNumber - 1, dimension))) - dimLogStepSize  << "," << log(maxRadius) << endl;
+    kugschalWriter << log(particleCount / (pow(stepNumber, dimension) - pow(stepNumber - 1, dimension))) - dimLogStepSize << "," << log(maxRadius) << endl;
     cout << "data saved in " << filePath << endl;
     return;
 }
@@ -408,7 +443,7 @@ void Cluster::boxcount(int stepNumber) {
     cout << "data saved in " << filePath << endl;
     return;
 }
-void Cluster::information(int stepNumber) {
+void Cluster::info(int stepNumber) {
     string filePath = "octave/info/" + clusterName + "info" + to_string(stepNumber) + ".txt"; //dateiname enthält die methode und die schrittzahl
     ofstream infoWriter(folderPath + filePath);
     getMaxRadius();
@@ -443,17 +478,100 @@ void Cluster::information(int stepNumber) {
         }
         infoFunction += (log(counter2)-logCounter)*counter2/counter;
         cout << " boxes " << counter << endl;
-        infoWriter << -infoFunction/log(boxlength) << "," << boxlength << endl;
+        infoWriter << boxlength << "," << -infoFunction/log(boxlength) << endl;
     }
     cout << "data saved in " << filePath << endl;
     return;
 }
-void Cluster::correlation() { //nicht implementiert
-
+void Cluster::renyi(double q) {
+    string filePath = "octave/renyi/" + clusterName + "renyi" + to_string(q) + ".txt"; //dateiname enthält die methode und die schrittzahl
+    ofstream infoWriter(folderPath + filePath);
+    getMaxRadius();
+    getRange();
+    int stepNumber = 100;
+    double stepSize = 0.1 * maxRadius / stepNumber;
+    double boxlength;
+    double pSum;
+    boxes.resize(particleCount);
+    int counter = 0;
+    double invPowCounter;
+    for (int k = 1; k <= stepNumber; k++) {
+        cout << "k " << k;
+        boxlength = stepSize * k;
+        getBoxes(boxlength);
+        counter = 1;
+        for (int i = 0; i < particleCount - 1; i++) { //bestimmt die anzahl verschiedener boxen
+            if (boxes[i] != boxes[i + 1]) {
+                counter++;
+            }
+        }
+        invPowCounter = pow(counter, -q);
+        pSum = 0;
+        int counter2 = 0;
+        for (int i = 0; i < particleCount - 1; i++) {
+            if (boxes[i] != boxes[i + 1]) { //bestimmt die anzahl der teilchen in jeder box
+                pSum += pow(counter2, q) * invPowCounter;
+                counter2 = 1;
+            }
+            else {
+                counter2++;
+            }
+        }
+        pSum = log(pSum + pow(counter2, q) * invPowCounter) / (q - 1) / log(boxlength);
+        cout << " boxes " << counter << endl;
+        infoWriter << boxlength << "," << pSum << endl;
+    }
+    cout << "data saved in " << filePath << endl;
     return;
 }
-void Cluster::renyi() { //nicht implementiert
-
+void Cluster::correl(int stepNumber) {
+    string filePath = "octave/correl/" + clusterName + "correl" + to_string(stepNumber) + ".txt"; //datei enthält die methode und die schrittzahl
+    ofstream correlWriter(folderPath + filePath);
+    int dotNumber = 100;
+    double rmin = 2;
+    double rmax = 7.5;
+    double rcur = rmin;
+    double dotStepSize = pow(rmax / rmin, 1.0 / dotNumber);
+    vector<double> steps(dotNumber);
+    vector<int> counterVec(dotNumber);
+    for (int i = 0; i < dotNumber; i++) {
+        counterVec[i] = 0;
+        steps[i] = rcur * rcur;
+        rcur = rcur * dotStepSize;
+    }
+    int stepSize = (int)(sqrt(particleCount) / 100);
+    vector<double> currentParticle(dimension);
+    vector<double> currentRadii(particleCount - 1);
+    double rSquared;
+    int counter;
+    for (int k = 0; k < stepNumber; k++) {
+        currentParticle = particles[k * stepSize];
+        for (int i = 0; i < particleCount; i++) {
+            rSquared = 0;
+            for (int j = 0; j < dimension; j++) {
+                rSquared += (particles[i][j] - currentParticle[j]) * (particles[i][j] - currentParticle[j]); //berechnet den quadratischen abstand zum aktuellen Teilchen für jedes teilchen
+            }
+            if (i < k * stepSize) {
+                currentRadii[i] = rSquared;
+            }
+            else if (i > k * stepSize) {
+                currentRadii[i - 1] = rSquared;
+            }
+        }
+        sort(currentRadii.begin(), currentRadii.end());
+        counter = 0;
+        for (int i = 0; i < dotNumber; i++) {
+            while (currentRadii[counter] < steps[i]) {
+                counter++;
+            }
+            counterVec[i] += counter;
+        }
+        cout << "k " << k + 1 << endl;
+    }
+    for (int i = 0; i < dotNumber; i++) {
+        correlWriter << log(steps[i]) << "," << log(counterVec[i]) << endl;
+    }
+    cout << "data saved in " << filePath << endl;
     return;
 }
 int main() { //Benutzerschnittstelle, von der aus Cluster geladen und Befehle zur Dimensionsbestimmung eingegeben werden können
@@ -471,7 +589,7 @@ int main() { //Benutzerschnittstelle, von der aus Cluster geladen und Befehle zu
             cluster.clusterLoaded = cluster.load();
         }
         else {
-            cout << "available commands: help, back, exit, trara [stepSize], kugvol [stepNumber], kugschal [stepNumber]" << endl;
+            cout << "available commands: help, back, exit, trara1 [N], trara2 [N] kugvol [N], kugschal [N], boxcount [N], info [N], renyi [q], correl [N]" << endl;
             getline(cin, cluster.input);
             if (cluster.input == "exit") {
                 return 0;
