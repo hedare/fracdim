@@ -11,12 +11,14 @@ public:
 	string input;
 	string clusterName;
 	string clusterPath;
-	string folderPath = "../../"; //Pfad von dem Ausführungsort des Programms zum Ordner 'dla'
+    string folderPath = "../"; //Pfad von dem Ausführungsort des Programms zum Ordner 'dla'
 	bool clusterLoaded = false; //gibt an, ob ein Cluster, bzw. seine Teilchenkoordinaten (particles), geladen wurde
 	double maxRadius = 0;
 	int dimension; //Raumdimension d
 	int particleCount = 0; //Anzahl N der Teilchen
-	vector<vector<double>> particles; // Nxd-Matrix aller Teilchenkoordinaten
+    vector<int> testBoxlength = { 3162,215,56,25,14,10,7,6,5 };
+    vector<double> tempParticle;
+    vector<vector<double>> particles; // Nxd-Matrix aller Teilchenkoordinaten
 	vector<double> centerOfMass; //d-Vektor, Schwerpunktkoordinaten
 	vector<double> radii; //N-Vektor, Schwerpunktsabstände aller Teilchen
 	vector<double> sortedRadii; //N-Vektor, sortierte radii
@@ -24,6 +26,7 @@ public:
 	vector<unsigned long long int> boxes;
 	Cluster() {};
 	bool getClusterPath(); //setzt den Namen und den Pfad zu dem  jeweiligen Cluster (hart gecodet)
+    void loadTest(int depth);
 	bool load(); //lädt die Koordinaten aller Teilchen des eingegebenen Clusters
 	void checkCommands(); //überprüft den Input auf die eingebauten Befehle
 	void getCenterOfMass(); //berechnet den Schwerpunkt des Clusters
@@ -135,11 +138,38 @@ bool Cluster::getClusterPath() {
 	}
 	return true;
 }
+void Cluster::loadTest(int depth) {
+    for (int x = 0; x < testBoxlength[dimension - 2]; x++) {
+        tempParticle[depth - 1] = x;
+        if (depth < dimension) {
+            loadTest(depth + 1);
+        }
+        else {
+            particles[particleCount] = tempParticle;
+            particleCount++;
+            if (particleCount % 1000000 == 0) {
+                cout << particleCount << " particles loaded" << endl;
+            }
+        }
+    }
+    return;
+}
 bool Cluster::load() {
-	if (input.size() != 8) { //korrekter input besteht immer aus 8 zeichen
-		cout << "invalid input, please try again" << endl;
-		return false;
-	}
+    if (input.substr(0, 4) == "test") {
+        try {
+            dimension = stoi(input.substr(5, input.size() - 5));
+            tempParticle.resize(dimension);
+            particles.resize(testBoxlength[dimension - 2] * testBoxlength[dimension - 2]);
+            clusterName = "test" + dimension;
+            loadTest(1);
+            cout << particleCount << " particles loaded" << endl;
+            return true;
+        }
+        catch (...) {
+            cout << "please pick an integer from 2 to 10" << endl;
+            return false;
+        }
+    }
 	if (!getClusterPath()) { //wendet getClusterPath an, welches false ausgibt, wenn der input nicht korrekt ist
 		cout << "invalid input, please try again" << endl;
 		return false;
@@ -178,7 +208,7 @@ bool Cluster::load() {
 	while (!reader.eof()) {
 		reader.get(letter);
 		if (letter == ' ') {
-			particles[particleCount].push_back(stod(word)); //schreibt die korrdinaten in particles
+            particles[particleCount].push_back(stod(word)); //schreibt die koordinaten in particles
 			word = "";
 		}
 		else if (letter == '\n') {
@@ -530,9 +560,9 @@ void Cluster::renyi(double q) {
 void Cluster::correl(int stepNumber) {
 	string filePath = "octave/correl/" + clusterName + "correl" + to_string(stepNumber) + ".txt"; //datei enthält die methode und die schrittzahl
 	ofstream correlWriter(folderPath + filePath);
-	int dotNumber = 100;
-	double rmin = 2;
-	double rmax = 7.5;
+    int dotNumber = 1000;
+    double rmin = 0.5;//2
+    double rmax = 20;//7.5
 	double rcur = rmin;
 	double dotStepSize = pow(rmax / rmin, 1.0 / dotNumber);
 	vector<double> steps(dotNumber);
@@ -584,7 +614,8 @@ int main() { //Benutzerschnittstelle, von der aus Cluster geladen und Befehle zu
 			cout << "available clusters:" << endl << "old:" << endl <<
 				" 2D: 3, 3D: 3, 4D: 3, 5D: 2, 6D: 1, 7D: 3, 8D: 1, 9D: 1, 10D: 1, 12D: 1, 13D: 1" << endl <<
 				"new:" << endl << " 7D: 4, 8D: 3, 10D: 2" << endl <<
-				"pick a cluster in the form 'old 02 1' or 'new 10 2' or exit" << endl;
+                "test 02 - 10" << endl <<
+                "pick a cluster in the form 'old 02 1' or 'new 10 2' or 'test 2' or exit" << endl;
 			getline(cin, cluster.input);
 			if (cluster.input == "exit") {
 				return 0;
