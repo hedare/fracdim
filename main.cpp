@@ -11,7 +11,7 @@ public:
 	string input;
 	string clusterName;
 	string clusterPath;
-    string folderPath = "../"; //Pfad von dem Ausführungsort des Programms zum Ordner 'dla'
+    string folderPath = "../../"; //Pfad von dem Ausführungsort des Programms zum Ordner 'dla'
 	bool clusterLoaded = false; //gibt an, ob ein Cluster, bzw. seine Teilchenkoordinaten (particles), geladen wurde
 	double maxRadius = 0;
 	int dimension; //Raumdimension d
@@ -159,7 +159,7 @@ bool Cluster::load() {
         try {
             dimension = stoi(input.substr(5, input.size() - 5));
             tempParticle.resize(dimension);
-            particles.resize(testBoxlength[dimension - 2] * testBoxlength[dimension - 2]);
+			particles.resize(pow(testBoxlength[dimension - 2], dimension));
             clusterName = "test" + dimension;
             loadTest(1);
             cout << particleCount << " particles loaded" << endl;
@@ -453,13 +453,14 @@ void Cluster::boxcount(int stepNumber) {
 	ofstream boxcountWriter(folderPath + filePath);
 	getMaxRadius();
 	getRange();
-	double stepSize = maxRadius / stepNumber;
-	double boxlength;
+	double boxlength = 1;
+	double stepSize = pow (maxRadius / boxlength, 1.0 / stepNumber);
 	boxes.resize(particleCount);
 	int counter = 0;
-	for (int k = 1; k <= stepNumber; k++) {
+	int k = 0;
+	while (boxlength < maxRadius) {
+		k++;
 		cout << "k " << k;
-		boxlength = stepSize * k;
 		getBoxes(boxlength);
 		counter = 1;
 		for (int i = 0; i < particleCount - 1; i++) { //bestimmt die anzahl verschiedener boxen
@@ -469,6 +470,7 @@ void Cluster::boxcount(int stepNumber) {
 		}
 		cout << " boxes " << counter << endl;
 		boxcountWriter << log(counter) << "," << log(boxlength) << endl;
+		boxlength = boxlength * stepSize;
 	}
 	cout << "data saved in " << filePath << endl;
 	return;
