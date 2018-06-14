@@ -5,28 +5,26 @@
 #include <stdio.h>
 #include <vector>
 #include <algorithm> //implementiert die sort()-funktion
+#include <time.h>
 using namespace std;
 class Cluster {
 public:
 	string input;
 	string clusterName;
 	string clusterPath;
-    string folderPath = "../../"; //Pfad von dem Ausführungsort des Programms zum Ordner 'dla'
+    string folderPath = "../"; //Pfad von dem Ausführungsort des Programms zum Ordner 'dla'
 	bool clusterLoaded = false; //gibt an, ob ein Cluster, bzw. seine Teilchenkoordinaten (particles), geladen wurde
 	double maxRadius = 0;
 	int dimension; //Raumdimension d
-	int particleCount = 0; //Anzahl N der Teilchen
-    vector<int> testBoxlength = { 3162,215,56,25,14,10,7,6,5 };
-    vector<double> tempParticle;
+    int particleCount = 0; //Anzahl N der Teilchen
     vector<vector<double>> particles; // Nxd-Matrix aller Teilchenkoordinaten
 	vector<double> centerOfMass; //d-Vektor, Schwerpunktkoordinaten
 	vector<double> radii; //N-Vektor, Schwerpunktsabstände aller Teilchen
 	vector<double> sortedRadii; //N-Vektor, sortierte radii
 	vector<vector<double>> range = { {},{},{} }; //3xd-Vektor, kleinste und größte Koordinate in jeder Dimension und ihre Differenz
 	vector<unsigned long long int> boxes;
-	Cluster() {};
-	bool getClusterPath(); //setzt den Namen und den Pfad zu dem  jeweiligen Cluster (hart gecodet)
-    void loadTest(int depth);
+    Cluster() {}
+    bool getClusterPath(); //setzt den Namen und den Pfad zu dem  jeweiligen Cluster (hart gecodet)
 	bool load(); //lädt die Koordinaten aller Teilchen des eingegebenen Clusters
 	void checkCommands(); //überprüft den Input auf die eingebauten Befehle
 	void getCenterOfMass(); //berechnet den Schwerpunkt des Clusters
@@ -138,31 +136,22 @@ bool Cluster::getClusterPath() {
 	}
 	return true;
 }
-void Cluster::loadTest(int depth) {
-    for (int x = 0; x < testBoxlength[dimension - 2]; x++) {
-        tempParticle[depth - 1] = x;
-        if (depth < dimension) {
-            loadTest(depth + 1);
-        }
-        else {
-            particles[particleCount] = tempParticle;
-            particleCount++;
-            if (particleCount % 1000000 == 0) {
-                cout << particleCount << " particles loaded" << endl;
-            }
-        }
-    }
-    return;
-}
 bool Cluster::load() {
     if (input.substr(0, 4) == "test") {
         try {
             dimension = stoi(input.substr(5, input.size() - 5));
-            tempParticle.resize(dimension);
-			particles.resize(pow(testBoxlength[dimension - 2], dimension));
-            clusterName = "test" + dimension;
-            loadTest(1);
-            cout << particleCount << " particles loaded" << endl;
+            particleCount = 10000000;
+            particles.resize(particleCount);
+            clusterName = "test" + to_string(dimension);
+            for (int i = 0; i < particleCount; i++) {
+                for (int j = 0; j < dimension; j++) {
+                    particles[i].push_back(rand());
+                }
+                if ((i + 1) % 1000000 == 0) {
+                    cout << i + 1 << " particles created" << endl;
+                }
+            }
+            cout << "cluster " << clusterName << " created successfully" << endl;
             return true;
         }
         catch (...) {
@@ -611,6 +600,7 @@ void Cluster::correl(int stepNumber) {
 }
 int main() { //Benutzerschnittstelle, von der aus Cluster geladen und Befehle zur Dimensionsbestimmung eingegeben werden können
 	Cluster cluster = Cluster();
+    srand (time(NULL));
 	while (1) {
 		if (!cluster.clusterLoaded) {
 			cout << "available clusters:" << endl << "old:" << endl <<
